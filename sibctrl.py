@@ -7,6 +7,7 @@
 
 import argparse
 import contextlib
+import re
 import usb1                     # python-libusb1
 
 # Equalizer
@@ -20,6 +21,10 @@ CMD_EQL_DATA = 0x47
 CMD_UNKNOWN_49 = 0x49
 CMD_UNKNOWN_4A = 0x4A
 
+EQL_BANDS = (
+    '80 Hz', '280 Hz', '1 kHz', '3.5 kHz', '13 kHz'
+)
+
 EQL_REGISTERS = (
     CMD_REG_EQL_80,
     CMD_REG_EQL_280,
@@ -28,7 +33,7 @@ EQL_REGISTERS = (
     CMD_REG_EQL_13K,
 )
 
-EQL_DATA = ( # Some are repeated.
+EQL_DATA = ( # Unknown magic. Some are repeated.
     ( # 80 Hz.
         (0x3f, 0xa4, 0x76, 0xd0, 0xe0, 0x5a, 0xa5, 0xd, 0x0, 0x2d, 0x52, 0x86),
         (0x30, 0x4d, 0xc8, 0x89, 0xe9, 0xb2, 0x7e, 0x76, 0x4, 0xd9, 0x3f, 0x3b),
@@ -149,7 +154,7 @@ class Headset(object):
         else:
             values = EQL_DATA[band][1]
 
-        value_cmds = [headset_command(CMD_EQL_DATA, val) for val in values]
+        value_cmds = [headset_command(CMD_EQL_DATA, [val]) for val in values]
 
         epilogue = [
             headset_command(CMD_UNKNOWN_4A, [0x00]),
@@ -162,6 +167,46 @@ class Headset(object):
             self._send(cmd)
 
 
-if __name__ == '__main__':
+def main():
+    parser = argparse.ArgumentParser(description='Siberia 350 control')
+    parser.add_argument('--color',
+                        help='set the color of the headset LEDs (rrggbb)')
+    parser.add_argument('--mic-auto', dest='mic_auto', action='store_true', default=None,
+                        help='enable mic auto optimization')
+    parser.add_argument('--no-mic-auto', dest='mic_auto', action='store_false', default=None,
+                        help='disable mic auto optimization')
+    parser.add_argument('--equalizer',
+                        help='set the equalizer (e.g. 0,0,0,0,0)')
+    args = parser.parse_args()
+    if args.color is None and args.mic_auto is None and args.equalizer is None:
+        parser.print_help()
+
     with contextlib.closing(Headset()) as headset:
-        headset.set_color(0x00, 0xff, 0x00)
+        if args.color is not None:
+            color = re.findall('[0-9A-Fa-f]{2}', args.color)
+            if len(color) != 3:
+                parser.error('invalid color: %r' % args.color)
+            red, green, blue = (int(c, 16) for c in color)
+            print("Setting color to %02x%02x%02x" % (red, green, blue))
+            headset.set_color(red, green, blue)
+
+        if args.mic_auto is not None:
+            if args.mic_auto:
+                print('Enabling mic auto optimization')
+            else:
+                print('Disabling mic auto optimization')
+            headset.set_microphone_optimization(args.mic_auto)
+
+        if args.equalizer is not None:
+            values = [float(x) if x != '' else '' for x in args.equalizer.split(',')]
+            if len(values) != 5 or not all(v == '' or -12 <= v <= 12 for v in values):
+                parser.error('invalid equalizer setting: %r' % values)
+            print('Setting equalizer:')
+            for band, value in enumerate(values):
+                if value != '':
+                    print(" {:>7} - {:>5} dB".format(EQL_BANDS[band], value))
+                    headset.set_equalizer(band, int(2 * (value + 12)))
+
+
+if __name__ == '__main__':
+    main()
