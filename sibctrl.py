@@ -89,12 +89,13 @@ class Headset(object):
     """Class for controlling the headset."""
 
     VENDOR_ID = 0x1038
-    PRODUCT_ID = 0x1229
+    # PRODUCT_ID = 0x1229
+    PRODUCT_ID = 0x12AA
     INTERFACE_NUM = 3
 
     def __init__(self):
         self.context = usb1.USBContext()
-        # self.context.setDebug(usb1.LOG_LEVEL_DEBUG)
+        self.context.setDebug(usb1.LOG_LEVEL_DEBUG)
         self.handle = self.context.openByVendorIDAndProductID(self.VENDOR_ID, self.PRODUCT_ID)
         self.handle.setAutoDetachKernelDriver(True)
         self.handle.claimInterface(self.INTERFACE_NUM)
@@ -111,7 +112,7 @@ class Headset(object):
 
         """
         self.handle.controlWrite(usb1.TYPE_CLASS | usb1.RECIPIENT_INTERFACE,
-                                 request=9, value=0x0201, index=self.INTERFACE_NUM,
+                                 request=9, value=0x0206, index=self.INTERFACE_NUM,
                                  data=cmd)
 
     def set_color(self, red, green, blue):
@@ -122,6 +123,12 @@ class Headset(object):
             headset_command(CMD_SET_COLOR, [red, green, blue]),
             headset_command(CMD_UNKNOWN_93, [0x03, 0x80])
         )
+        for cmd in commands:
+            print(cmd)
+
+        # command = b"\x06\x81\x43\x01\x22\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        # self._send(command)
+
         for cmd in commands:
             self._send(cmd)
 
